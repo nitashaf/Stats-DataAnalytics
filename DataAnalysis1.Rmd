@@ -1,0 +1,244 @@
+---
+title: "Lab 14"
+output:
+  word_document:
+    fig_height: 5
+    fig_width: 8
+date: ""
+author: "Names"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE,
+                      warning = FALSE)
+options(show.signif.stars = FALSE)
+
+library(ggplot2)
+library(ggthemes)
+library(tidyverse)
+library(car)
+library(effects)
+library(readxl)
+library(mosaic)
+library(catstats2)
+library(ggResidpanel)
+library(easyalluvial)
+library(emmeans)
+library(patchwork)
+library(MuMIn)
+theme_set(theme_bw()) #Prevents need for + theme_bw() in ggplots
+```
+
+
+# Rules
+
+In groups of 2 or 3, complete the following.
+
+# Modeling Snow Presence, version 2
+
+We will continue to use the data set from Wetlaufer, Hendrikx, and Marshall (2016) that explored the relationship between snow density ($kg/m^3$) or snow depth (`snow`, mm) with a suite of predictor variables. To be able to measure characteristics of snow, they needed to find snow in the locations they were sampling, so the focus in this lab will be on the snow presence or absence at each location (`SnowPresence`). We will be interested in using `elev` (Elevation, m), `Land` (forest cover with 0 = unforested and 10 = forested), `rad` (Potential Solar radiation, $Wh/m^2$),  `curvature` (see https://blogs.esri.com/esri/arcgis/2010/10/27/understanding-curvature-rasters/ for a description), `aspect` (orientation of slope in degrees (0 to 360)), and `angle` (angle of slope in degrees with 0 being flat) as fixed effect predictors. Also pay attention to the `strata` variable (read its definition in the paper) and the role that played in the data collection and should in the analysis.
+
+* Wetlaufer, K., Hendrikx, J., and L. Marshall (2016) Spatial Heterogeneity of Snow Density and Its Influence on Snow Water Equivalence Estimates in a Large Mountainous Basin. _Hydrology_, 3(1):3, doi:10.3390/hydrology3010003. Available at http://www.mdpi.com/2306-5338/3/1/3/htm  and on D2L
+
+
+Run the following code to get re-started with the data set.
+
+```{r fig.width=8, fig.height=4}
+data(snowdepths)
+snowdepths <- snowdepths %>%
+  mutate(AspectCat = factor(case_when(
+    aspect %in% (0:45)~ "North",
+    aspect %in% (315:360)~ "North",
+    aspect %in% 45:(90+45) ~ "East",
+    aspect %in% (90+45):(180+45) ~ "South",
+    aspect %in% (180+45):315 ~ "West"
+  )),
+  SnowPresence = factor(case_when(
+    snow == 0 ~ "None",
+    snow > 0 ~ "Some"
+  )),
+  Landf = factor(cover)
+  )
+levels(snowdepths$Landf) <- c("Not Forested", "Forested")
+
+snowdepths <- snowdepths %>% mutate(ElMean = ave(elev, strata),
+      ElevCent = elev - ElMean)
+
+glm2 <- glm(SnowPresence ~ Landf + rad + ElMean + ElevCent + AspectCat,
+            data = snowdepths, family = binomial)
+summary(glm2)
+
+plot(allEffects(glm2), grid = T, type="link")
+plot(allEffects(glm2), grid = T, type = "response")
+```
+
+**Q1 (repeat of Q11 from Lab 13) Interpret the `Landf` slope coefficient on the odds scale from `glm2` fit above.**
+
+```{r}
+1/exp(-9.386e-01)
+confint(glm2)
+1/exp(-1.455363e+00)
+1/exp(-4.395598e-01)
+```
+The estimated mean odds of snow prediction is 
+
+**2) Check for multicollinearity in this `glm2` using the `vif` function. Report the results on using the rules of thumb and then specifically for the most impacted variable.**
+
+```{r}
+vif(glm2)
+sqrt(2.930991)
+```
+By the rule of thumb, all the vif values are small, there is no extreme multicolinearity.  The only one in the above result is ElMean,   
+
+**3) The following code makes a plot to visualize the response versus mean elevation by AspectCat. Modify the bandwidth to smooth but not oversmooth the density curves in the plots. Then interpret the relationship between mean elevation and snow presence and how it might change based on the aspect of the sites.**
+
+
+```{r}
+snowdepths %>% ggplot(aes(x = ElMean, fill = SnowPresence))  +
+  geom_density(position='fill', bw = 80) +
+  scale_fill_colorblind()  +
+  geom_rug(aes(x = ElMean), alpha = 0.5, col = "red") +
+  facet_wrap(vars(AspectCat))
+
+
+```
+
+
+**4) We can do tests in GLMs using the z-statistics (distribution is the standard normal or just z with no DF to report) reported in the model summary or using `Anova` on the models to get tests similar to Type II ANOVA F-tests. The multi-degree of freedom tests use the Chi-squared distribution to find p-values but the hypotheses and interpretations otherwise match our previous work. Run `Anova` on the initial model and replace the censored parts of the following sentence to report the results from it for `AspectCat`.**
+
+```{r}
+Anova(glm2)
+```
+
+* There is  strong evidence against the null hypothesis of no difference in snow presence ($\chi^2_{3} = 54.63$, p-value 8.244e-12) controlled for Landf,rad,ElMean, ElevCent, so we would conclude that there is a difference snow presence rates across the different levels of AspectCat.
+
+
+**5) Replace the censored parts of the size sentence for the mean elevation predictor on the odds scale.**
+
+* For two sites that differ by 1 unit in the XXXXXXX of the site but are otherwise similar, the estimated mean odds of a site having snow is XXXX times as much (95% profile likelihood CI from 1.011233 to 1.016136e), controlled for XXXXXXXXXXXX.
+
+```{r}
+summary(glm2)$coefficient
+exp(1.332197e-02)
+
+exp(confint(glm2))
+```
+
+**6) In GLMs, we can also do pairwise comparisons using a version of Tukey-Kramer comparisons using emmeans. The results are on the link (here logit or log-odds) scale but can be translated to be on the odds scale. The following code generates pairwise comparisons among the levels of Aspect and provides an interpretation of the size for the East versus West facing sites on the odds scale. Modify the provided sentence to report the size for the North to West comparison.**
+
+* The estimated mean odds of encountering snow in an north facing site are 4.397341 times as much as for a West facing site (95% familywise-CI from 0.9277435 to 20.8426215), controlled for land cover, radiation, elevation strata mean and variation of the site around the strata mean.
+
+```{r}
+res1 <- emmeans(glm2, pairwise ~ AspectCat, adjust = "tukey")
+confint(res1)
+summary(res1)
+exp(3.175)
+exp(c(1.834, 4.515))
+
+
+```
+
+
+```{r}
+exp(1.481)
+exp(c(-0.075,3.037))
+```
+
+## Predicting Snow Presence
+
+If we were interested in assessing the prediction error in this situation, we would want to split the data set into training and test data sets. For time, we won't do any model selection within the training data and just assess the predictive performance of our initial model. The following code splits the data set and re-fits the model just to the training data and does some work to visualize that new version of the model.
+
+**7) What are the units of the y-axis in the `enhanced_stripchart`s that the code below produces?**
+
+
+```{r}
+set.seed(123)
+trainingD <- snowdepths %>% slice_sample(prop = 0.7)
+testD <- anti_join(x = snowdepths, y = trainingD)
+dim(trainingD)
+dim(testD)
+
+glm2_train <- glm(SnowPresence ~ Landf + rad + ElMean + ElevCent + AspectCat,
+            data = trainingD, family = binomial)
+
+glm2$coefficients
+glm2_train$coefficients
+
+plot(allEffects(glm2_train), type = "response")
+
+trainingD <- trainingD %>% mutate(trainingpreds = predict(glm2_train, newdata = trainingD))
+
+testD <- testD %>% mutate(testpreds = predict(glm2_train, newdata = testD))
+
+p1 <- enhanced_stripchart(trainingpreds ~ SnowPresence, data = trainingD) + geom_hline(yintercept = 0, col = "red", lwd = 1)
+p2 <- enhanced_stripchart(testpreds ~ SnowPresence, data = testD) + geom_hline(yintercept = 0, col = "red", lwd = 1)
+
+p1 + p2
+```
+Units of y-axis is log odds.  
+
+
+**8) Modify the following code to make the `enhanced_stripchart`s for the predictions to be on the response scale instead of the link scale and change the `geom_hline` to be useful for considering prediction results on the response scale. No discussion.**
+
+```{r}
+#Modify where appropriate:
+trainingD <- trainingD %>% mutate(trainingpreds = predict(glm2_train, newdata = trainingD, type='response'))
+
+testD <- testD %>% mutate(testpreds = predict(glm2_train, newdata = testD, type='response'))
+
+p1 <- enhanced_stripchart(trainingpreds ~ SnowPresence, data = trainingD) + geom_hline(yintercept = 0.5, col = "red", lwd = 1)
+p2 <- enhanced_stripchart(testpreds ~ SnowPresence, data = testD) + geom_hline(yintercept = 0.5, col = "red", lwd = 1)
+
+p1 + p2
+
+
+```
+
+**9) Using a probability of 0.5 from the estimated model, what proportion of the test data are predicted to be in the "success" category?**
+
+```{r}
+tally(testpreds > 0.5 ~ 1, data = testD)
+250/(250+56)
+```
+
+
+## Part III: Grizzly Bear Counts:
+
+In homework 2, we explored counts of grizzly bears using road crossing structures and you fit the following model:
+
+```{r}
+clev <- read_excel("clev_update.xlsx")
+clev <- clev %>% mutate(Configuration = factor(Configuration))
+
+lm1 <- lm(GrizBear ~ StructHeight + Configuration, data = clev)
+summary(lm1)
+plot(allEffects(lm1), grid = T)
+
+resid_panel(lm1, "R")
+vif(lm1)
+```
+
+* $GrizzlyCount_i \sim N(\mu_i, \sigma^2)$
+
+* $\hat{\mu}_i = -1.045 + 0.8067StructHeight_i - 0.956I_{Config = Undivided,i}$
+
+* where i = 1, ..., 13 structures and $I_{Config = Undivided,i}$ is 1 for undivided structures and 0 otherwise.
+
+**10) Here is a similar analysis using a Poisson GLM that more appropriately models the counts of grizzly bears that used the structures in the time period of the study. Write out the estimated model. Hint: see the introductory and Ch. 22 lecture notes.**
+
+```{r}
+glm1 <- glm(GrizBear ~ StructHeight + Configuration, data = clev, family = "poisson")
+
+summary(glm1)
+confint(glm1)
+plot(allEffects(glm1, residuals = T), grid = T, type = "link")
+plot(allEffects(glm1, residuals = T), grid = T, type = "response")
+resid_panel(glm1, "R")
+vif(glm1)
+```
+
+* $GrizzlyCount_i \sim$
+
+* $XXX(\hat{\mu}_i) = XXXX$
+
+* where i = 1, ..., 13 structures and $I_{Config = Undivided,i}$ is 1 for undivided structures and 0 otherwise.
