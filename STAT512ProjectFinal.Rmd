@@ -1,0 +1,181 @@
+---
+title: "STAT X12 Project"
+output:
+  word_document:
+    fig_height: 5
+    fig_width: 8
+date: ""
+author: Name
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE,
+                      warning = FALSE)
+options(show.signif.stars = FALSE)
+
+library(ggplot2)
+library(ggthemes)
+library(tidyverse)
+library(car)
+library(effects)
+library(janitor)
+library(readxl)
+library(catstats2)
+library(mosaic)
+theme_set(theme_bw()) #Prevents need for + theme_bw() in ggplots
+```
+
+
+```{r}
+library(mi)
+library(haven)
+mydata <- read_sav("C:\\Users\\nitas\\Downloads\\Overreportinginhandwashingselfreports_Final.sav")
+```
+
+```{r}
+my_data_m <- missing_data.frame(data.frame(mydata))
+image(my_data_m)
+colnames(my_data_m)
+dim(my_data_m)
+```
+
+
+```{r}
+colSums(!is.na(mydata))
+```
+```{r}
+colnames(mydata)[which(names(mydata) == "OR_SR_food")] <- "OvR_F"
+colnames(mydata)[which(names(mydata) == "OR_SR_stool")] <- "OvR_S"
+colnames(mydata)[which(names(mydata) == "E315_327_SD")] <- "MCSCS"
+colnames(mydata)[which(names(mydata) == "E304_01")] <- "Need_Confirm"
+colnames(mydata)[which(names(mydata) == "E305_01")] <- "Group_Attach"
+colnames(mydata)[which(names(mydata) == "E6134_01")] <- "Des_Food_N"
+colnames(mydata)[which(names(mydata) == "E6156_01")] <- "Inj_Food_N"
+colnames(mydata)[which(names(mydata) == "E5123_01")] <- "Des_Stool_N"
+colnames(mydata)[which(names(mydata) == "E5145_01")] <- "Inj_Stool_N"
+colnames(mydata)[which(names(mydata) == "E121.1_exHusb_cat")] <- "Pres_Oth_Adult"
+colnames(mydata)[which(names(mydata) == "E341.1")] <- "Pres_Spouce"
+colnames(mydata)[which(names(mydata) == "E301")] <- "Daily_Routine"
+colnames(mydata)[which(names(mydata) == "E335_339_2_MT_01")] <- "Fr_Task_Tnt"
+colnames(mydata)[which(names(mydata) == "E342")] <- "Est_Tendency"
+colnames(mydata)[which(names(mydata) == "E713_HW_stool_01")] <- "HW_Knowl_Stool"
+colnames(mydata)[which(names(mydata) == "E713_HW_food_01")] <- "HW_Knowl_Food"
+colnames(mydata)[which(names(mydata) == "E328_E334_DISS_Rationalisation_01")] <- "Rationalisation"
+colnames(mydata)[which(names(mydata) == "E713_stoolxE32834")] <- "Interaction_KW_R_Stool"
+colnames(mydata)[which(names(mydata) == "E713_foodxE32834")] <- "Interaction_KW_R_Food"
+colnames(mydata)[which(names(mydata) == "E306_repoled_01")] <- "Loaded_Que_Word"
+colnames(mydata)[which(names(mydata) == "MeanHW_01")] <- "SR_Food_Stool"
+colnames(mydata)[which(names(mydata) == "Version_numerisch")] <- "Sc_Que_Version"
+colnames(mydata)[which(names(mydata) == "E306_E307_FW_umgepolt_01")] <- "Sc_Forgiving"
+colnames(mydata)[which(names(mydata) == "E309_E311_E306_context_01_repol")] <- "Sc_Que_Context"
+colnames(mydata)[which(names(mydata) == "OR_ICR_stool")] <- "OR_Script_Stool"
+colnames(mydata)[which(names(mydata) == "OR_ICR_food")] <- "OR_Script_Food"
+ 
+
+```
+
+
+Subset for food related Data
+```{r}
+mydata2 <- mydata[ , c(35:ncol(mydata))]
+mydata2 <- mydata2[ , c(-5,-7,-14,-17,-24)]
+
+
+my_data2_m <- missing_data.frame(data.frame(mydata2))
+image(my_data2_m)
+colnames(my_data2_m)
+dim(my_data2_m)
+```
+Removing the script related variables from Food related dataset.
+```{r}
+mydata2_a <- mydata2[ , c(-15,-16,-17,-18,-19,-20)]
+
+
+my_data2_m <- missing_data.frame(data.frame(mydata2_a))
+image(my_data2_m)
+dim(my_data2_m)
+
+mydata2_b <- mydata2_a %>% drop_na()
+my_data2b_m <- missing_data.frame(data.frame(mydata2_b))
+image(my_data2b_m)
+dim(my_data2b_m)
+```      
+
+Correlation to find the answers of first 9 hypothesis.(Food)
+```{r fig.height=6,fig.width=10}
+library(psych)
+pairs.panels(mydata2_b,smooth=FALSE,ellipses=FALSE,digits=4)
+{pairs.panels}
+```
+
+Fitting the Linear Models
+```{r}
+
+lm_F_S_R = lm(OvR_F~MCSCS + Need_Confirm  + Des_Food_N + Inj_Food_N + Fr_Task_Tnt  +Est_Tendency+ HW_Knowl_Food + Rationalisation,  data=mydata2_b) 
+vif(lm_F_S_R)
+summary(lm_F_S_R)
+
+```
+
+
+Checking the Assumptions for the linear Model
+```{r fig.height=8,fig.width=10}
+
+library(ggResidpanel)
+library(haven)
+mydata2_b <- zap_formats(zap_labels(mydata2_b))
+plot(allEffects(lm_F_S_R, residuals = T), grid = T)
+resid_xpanel(lm_F_S_R, yvar = "response")
+resid_panel(lm_F_S_R, "R", alpha=0.1)
+
+```
+
+From here we will do our own analysis on the 
+
+Research Question:
+We will systematically investigate various model combinations to identify potential predictors that may offer improved insights into the over reporting of hand washing behavior."
+
+From here on we will only work for the Food related over reporting of hand wash.
+Lets pick the full model according to paper. 
+
+```{r}
+options(na.action = "na.fail")
+library(MuMIn) #Load the multi-model inference package
+# prevent fitting sub-models to different datasets
+options(na.action = "na.fail") #Must be run to use dredge
+res_lm_F_S_R <- dredge(lm_F_S_R, rank = "AIC", extra = "R^2") 
+subset(res_lm_F_S_R, delta<6)
+dim(res_lm_F_S_R)
+
+```
+
+
+```{r}
+
+MMFood <- lm(OvR_F ~1,data=mydata2_b)
+AIC(MMFood)
+head(res_lm_F_S_R,3)
+```
+There were 256 models explored. The top selected model and mean only model has AIC difference of 99.82. which provides us strong evidence for our top model.
+Top model with AIC 182, contains Des_Fod_N , Fr_Tsk_Tnt ,HW_Knw_Fod ,Inj_Fod_N and rationalization as predictors 
+
+
+Next we tested interaction 
+```{r fig.height=8,fig.width=10}
+
+lm_F_S_R_2 = lm(OvR_F~ (Des_Food_N + Inj_Food_N + Fr_Task_Tnt  + Rationalisation)^2,  data=mydata2_b) 
+res_lm_F_S_R_2 <- dredge(lm_F_S_R_2, rank = "AIC", extra = "R^2") 
+head(subset(res_lm_F_S_R_2, delta<6),3)
+dim(res_lm_F_S_R_2)
+```
+
+
+Effect Plot
+```{r}
+resid_panel(model = lm_F_S_R, plot= 'R', alpha=0.1, smoother= T)
+resid_panel(model = lm_F_S_R_2, plot= 'R', alpha=0.1, smoother= T)
+```
+```{r catRmd,asis=TRUE}
+rmd<-read_lines("STAT512ProjectFinal.Rmd")
+cat(paste(rmd,"\n"))
+```
